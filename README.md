@@ -22,7 +22,7 @@ fastapiの場合appのmount機能を提供しているので今作っている�
 
 ### Image
 
-![flow](https://tva1.sinaimg.cn/large/008i3skNgy1gw9u308ln9j30e70alt8x.jpg)
+![flow](./flow.png)
 
 ### Usage
 
