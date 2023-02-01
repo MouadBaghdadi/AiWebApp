@@ -1,15 +1,19 @@
-from tortoise.models import Model
-from tortoise import fields
+from .database import Base
+from sqlalchemy import Column, Integer, String, ForeignKey, Boolean
+from sqlalchemy.orm import relationship
 
+class User(Base):
+    __tablename__ = 'users'
 
-class User(Model):
-    id = fields.IntField(pk=True)
-    provider = fields.CharField(max_length=20)
-    email = fields.CharField(max_length=200, unique=True)
-    avatar = fields.CharField(max_length=1000, default=None, null=True)
-    username = fields.CharField(max_length=30, default=None, null=True)
-    nickname = fields.CharField(max_length=30, default=None, null=True)
-    verified = fields.BooleanField(default=False)
-    onboarded = fields.BooleanField(default=False)
-    created_at = fields.DatetimeField(auto_now_add=True)
-    last_logged_in = fields.DatetimeField(auto_now=True)
+    id = Column(Integer, primary_key = True, index= True)
+    uid = Column(String)
+    username = Column(String)
+    email = Column(String)
+    provider = Column(String)
+    avatar = Column(String)
+    nickname = Column(String)
+    verified = Column(Boolean)
+    onboarded = Column(Boolean)
+    created_at = Column(String)
+    last_logged_in = Column(String)
+

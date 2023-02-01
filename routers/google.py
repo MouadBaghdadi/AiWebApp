@@ -3,16 +3,21 @@ from fastapi.responses import JSONResponse
 from fastapi_jwt_auth import AuthJWT
 from google.auth.transport import requests
 from google.oauth2.id_token import verify_oauth2_token
-from ..utils import request
-from ..settings import Settings
-from ..models.user import User
+from utils import request
+from settings import Settings
+from models.user import User
 from urllib.parse import urlparse, parse_qs
 from pydantic import BaseModel
 from typing import Optional
+from sqlalchemy.orm import Session
+from models.database import get_db
 import datetime
+from starlette.responses import HTMLResponse
 
 settings = Settings()
-router = APIRouter()
+router = APIRouter(
+    prefix= '/auth',
+)
 
 
 class DevLoginRequest(BaseModel):
@@ -28,10 +33,13 @@ class LoginRequest(BaseModel):
 url = settings.GOOGLE_URL
 url = url.replace("google#", "google?")
 
+@router.get('/')
+def home():
+    return 'home'
 
 @router.post('/login')
 async def google_login(req: LoginRequest if settings.APP_ENV != 'dev' else DevLoginRequest,
-                       Authorize: AuthJWT = Depends()):
+                       Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
     """
     Login API
     """
@@ -48,19 +56,21 @@ async def google_login(req: LoginRequest if settings.APP_ENV != 'dev' else DevLo
     except Exception as ve:
         return JSONResponse(status_code=status.HTTP_408_REQUEST_TIMEOUT, content={'error': 'timeout'})
 
-    user = await User.filter(email=auth_info['email']).first()
+    user = await db.query(User).filter(User.email == auth_info['email']).first()
     if not user:
         profile = await request(f'https://www.googleapis.com/oauth2/v1/userinfo?access_token={google_access_token}')
         if not profile.get('verified_email'):
             raise exceptions.RequestValidationError({'message': 'email not verified'})
-        user = User(
+        new_user = User(
             provider='google',
             nickname=profile['family_name'] + profile['given_name'],
             email=profile['email'],
             verified=True,
             avatar=profile['picture']
         )
-        await user.save()
+        db.add(new_user)
+        db.commit()
+        db.refresh(new_user)
 
     sign_data = {
         'id': user.id,
@@ -78,21 +88,18 @@ async def google_login(req: LoginRequest if settings.APP_ENV != 'dev' else DevLo
     Authorize.set_access_cookies(access_token)
     Authorize.set_refresh_cookies(refresh_token)
 
-    return {
-        'access_token': access_token,
-        'refresh_token': refresh_token
-    }
+    return HTMLResponse(f'<pre>access token:</pre>') 
 
 
 @router.post('/refresh')
-async def refresh(Authorize: AuthJWT = Depends()):
+async def refresh(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
     Authorize.jwt_refresh_token_required()
 
     signed_user = Authorize.get_jwt_subject()
     new_access_token = Authorize.create_access_token(subject=signed_user)
     Authorize.set_access_cookies(new_access_token)
 
-    await User.filter(email=signed_user).update(last_logged_in=datetime.datetime.now())
+    await db.query(User).filter(signed_user == User.email).update(last_logged_in= datetime.datetime.now)
     return {'access_token': new_access_token}
 
 
@@ -104,10 +111,10 @@ def logout(Authorize: AuthJWT = Depends()):
 
 
 @router.post('/user')
-async def get_user(Authorize: AuthJWT = Depends()):
+async def get_user(Authorize: AuthJWT = Depends(), db: Session = Depends(get_db)):
     Authorize.jwt_required()
     signed_user = Authorize.get_jwt_subject()
-    current_user = await User.filter(email=signed_user).first()
+    current_user = await db.query(User).filter(signed_user == User.email).first()
     return {
         "user": current_user
     }
